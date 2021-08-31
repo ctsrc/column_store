@@ -1,0 +1,16 @@
+[package]
+name = "column_store_proc_macros"
+description = "Procedural macros for crate column_store."
+license = "ISC"
+readme = "README.md"
+repository = "https://github.com/ctsrc/column_store/tree/master/column_store_proc_macros"
+version = "0.1.0"
+authors = ["Erik Nordstrøm <erik@nordstroem.no>"]
+edition = "2018"
+keywords = ["data-oriented-design"]
+
+[lib]
+proc-macro = true
+
+[dependencies]
+

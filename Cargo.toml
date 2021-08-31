@@ -1,0 +1,6 @@
+[workspace]
+
+members = [
+    "column_store",
+    "column_store_proc_macros",
+]
