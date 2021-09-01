@@ -1,0 +1,11 @@
+[package]
+name = "columnstore"
+description = "Typo."
+license = "ISC"
+version = "0.0.0"
+edition = "2018"
+readme = "README.md"
+
+[dependencies]
+
+[workspace]
