@@ -1,7 +1,6 @@
 use tempfile::tempdir;
 use derive_new::new;
 
-#[macro_use]
 use column_store::get_first_match;
 use column_store::Table;
 
