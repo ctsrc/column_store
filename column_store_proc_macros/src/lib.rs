@@ -32,7 +32,7 @@ pub fn derive_table (item: TokenStream) -> TokenStream {
     }
     // XXX: We do not allow the input ident as a whole to be simply "TableRecord".
     //      The input ident must consist of a non-zero length name even without the suffix
-    //      as a whole. This way all tables are required to be given actual names. (Of course
+    //      as a whole. This way all tables are required to be given "actual names". (Of course,
     //      anyone could still name it something "meaningless" like "MyTableRecord" that still says
     //      nothing about what it contains. But that is outside of our area of concern. Our concern
     //      around naming ends at *encouraging* good naming.)
