@@ -46,21 +46,23 @@ pub fn derive_table (item: TokenStream) -> TokenStream {
     let table_ident = Ident::new(table_name, Span::call_site());
 
     let output = quote! {
-        struct #table_ident {
-            f: ::column_store::fd_lock::RwLock<::std::fs::File>,
+        struct #table_ident<'a> {
+            g: ::column_store::fd_lock::RwLockWriteGuard<'a, ::std::fs::File>,
         }
-        impl #table_ident {
-            pub fn try_new (db_dir: impl AsRef<::std::path::Path>) -> ::std::result::Result<Self, ::column_store::TableError>
-            {
+        impl<'a> #table_ident<'a> {
+            pub fn try_open_records_file (db_dir: impl AsRef<::std::path::Path>) -> std::io::Result<::column_store::fd_lock::RwLock<::std::fs::File>> {
                 let table_dir = db_dir.as_ref().join(#table_name).clone();
                 ::std::fs::create_dir_all(&table_dir)?;
-                let f = ::column_store::fd_lock::RwLock::new(
-                    ::std::fs::OpenOptions::new()
-                        .create(true)
-                        .append(true)
-                        .open(table_dir.join("rows.cst"))?);
+                let f = ::std::fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(table_dir.join("rows.cst"))?;
+                Ok(::column_store::fd_lock::RwLock::new(f))
+            }
+            pub fn try_new (records_file_lock: &'a mut ::column_store::fd_lock::RwLock<::std::fs::File>) -> Result<Self, ::column_store::TableError>
+            {
                 Ok(Self {
-                    f,
+                    g: records_file_lock.try_write()?,
                 })
             }
             pub fn insert_one (&mut self, record: #record_struct_ident)

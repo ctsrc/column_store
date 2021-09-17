@@ -1,5 +1,5 @@
-use tempfile::tempdir;
 use derive_new::new;
+use tempfile::tempdir;
 
 use column_store::get_first_match;
 use column_store::Table;
@@ -15,7 +15,8 @@ struct Example1TableRecord {
 #[test]
 fn test_get_first_match_1 () {
     let db_dir = tempdir().unwrap();
-    let mut example_table = Example1Table::try_new(db_dir.path()).unwrap();
+    let mut table_l = Example1Table::try_open_records_file(db_dir.path()).unwrap();
+    let mut example_table = Example1Table::try_new(&mut table_l).unwrap();
     example_table.insert_one(Example1TableRecord::new(13, 37, 42, "Hello World!".into()));
     example_table.insert_one(Example1TableRecord::new(23, 23, 90, "Hot pepper sauce!".into()));
 
@@ -27,7 +28,8 @@ fn test_get_first_match_1 () {
 #[test]
 fn test_get_first_match_2 () {
     let db_dir = tempdir().unwrap();
-    let mut example_table = Example1Table::try_new(db_dir.path()).unwrap();
+    let mut table_l = Example1Table::try_open_records_file(db_dir.path()).unwrap();
+    let mut example_table = Example1Table::try_new(&mut table_l).unwrap();
     example_table.insert_one(Example1TableRecord::new(13, 37, 42, "Hello World!".into()));
     example_table.insert_one(Example1TableRecord::new(23, 23, 90, "Hot pepper sauce!".into()));
 
