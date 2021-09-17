@@ -66,6 +66,9 @@ pub fn derive_table (item: TokenStream) -> TokenStream {
             pub fn insert_one (&mut self, record: #record_struct_ident)
             {
             }
+            pub fn insert_many (&mut self, records: &[#record_struct_ident])
+            {
+            }
         }
     };
 
