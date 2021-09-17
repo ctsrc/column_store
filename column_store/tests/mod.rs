@@ -37,3 +37,17 @@ fn test_get_first_match_2 () {
     assert_eq!(c2, 42);
     assert_eq!(d2, "Hello World!");
 }
+
+#[test]
+fn test_lock_exclusive_twice () {
+    let db_dir = tempdir().unwrap();
+
+    let mut table_l = Example1Table::try_open_records_file(db_dir.path()).unwrap();
+    let mut example_table = Example1Table::try_new(&mut table_l).unwrap();
+
+    let mut table_l = Example1Table::try_open_records_file(db_dir.path()).unwrap();
+    Example1Table::try_new(&mut table_l)
+        .expect_err("Was able to open already-locked table file");
+
+    example_table.insert_one(Example1TableRecord::new(13, 37, 42, "Hello World!".into()));
+}

@@ -46,6 +46,7 @@ pub fn derive_table (item: TokenStream) -> TokenStream {
     let table_ident = Ident::new(table_name, Span::call_site());
 
     let output = quote! {
+        #[derive(Debug)]
         struct #table_ident<'a> {
             g: ::column_store::fd_lock::RwLockWriteGuard<'a, ::std::fs::File>,
         }
