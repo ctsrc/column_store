@@ -45,10 +45,23 @@ pub fn derive_table (item: TokenStream) -> TokenStream {
     let table_name = &record_struct_name[..record_struct_name.len() - "Record".len()];
     let table_ident = Ident::new(table_name, Span::call_site());
 
+    let rows_name = format!("{}Rows", table_name);
+    let rows_ident = Ident::new(&rows_name, Span::call_site());
+
     let output = quote! {
         #[derive(Debug)]
+        struct #rows_ident {
+            // TODO: Generate from the item TokenStream
+            a: ::std::sync::Arc<::std::sync::Mutex<Vec<u64>>>,
+            b: ::std::sync::Arc<::std::sync::Mutex<Vec<u64>>>,
+            c: ::std::sync::Arc<::std::sync::Mutex<Vec<u8>>>,
+            d: ::std::sync::Arc<::std::sync::Mutex<Vec<String>>>,
+        }
+        #[derive(Debug)]
         struct #table_ident<'a> {
-            g: ::column_store::fd_lock::RwLockWriteGuard<'a, ::std::fs::File>,
+            records_file_lock_guard: ::column_store::fd_lock::RwLockWriteGuard<'a, ::std::fs::File>,
+            // TODO: Indexes from UNIQUE constraints
+            rows: #rows_ident,
         }
         impl<'a> #table_ident<'a> {
             pub fn try_open_records_file (db_dir: impl AsRef<::std::path::Path>) -> std::io::Result<::column_store::fd_lock::RwLock<::std::fs::File>> {
@@ -62,15 +75,60 @@ pub fn derive_table (item: TokenStream) -> TokenStream {
             }
             pub fn try_new (records_file_lock: &'a mut ::column_store::fd_lock::RwLock<::std::fs::File>) -> Result<Self, ::column_store::TableError>
             {
+                let records_file_lock_guard = records_file_lock.try_write()?;
+
+                let rows = {
+                    // TODO: Read records from file
+                    let a = vec![];
+                    let b = vec![];
+                    let c = vec![];
+                    let d = vec![];
+
+                    #rows_ident{
+                        a: ::std::sync::Arc::new(::std::sync::Mutex::new(a)),
+                        b: ::std::sync::Arc::new(::std::sync::Mutex::new(b)),
+                        c: ::std::sync::Arc::new(::std::sync::Mutex::new(c)),
+                        d: ::std::sync::Arc::new(::std::sync::Mutex::new(d)),
+                    }
+                };
+
                 Ok(Self {
-                    g: records_file_lock.try_write()?,
+                    records_file_lock_guard,
+                    rows,
                 })
             }
-            pub fn insert_one (&mut self, record: #record_struct_ident)
+            pub fn try_insert_one (&mut self, record: #record_struct_ident) -> Result<(), ::column_store::TableRecordInsertError>
             {
+                let mut a_guard = self.rows.a.try_lock()?;
+                let mut b_guard = self.rows.b.try_lock()?;
+                let mut c_guard = self.rows.c.try_lock()?;
+                let mut d_guard = self.rows.d.try_lock()?;
+
+                // TODO: Checkpoint Vec len and use for rollback
+
+                a_guard.push(record.a);
+                b_guard.push(record.b);
+                c_guard.push(record.c);
+                d_guard.push(record.d);
+
+                // TODO: Write to file
+                // TODO: Rollback if write fails
+
+                Ok(())
             }
-            pub fn insert_many (&mut self, records: &[#record_struct_ident])
+            pub fn try_insert_many (&mut self, records: &[#record_struct_ident]) -> Result<(), ::column_store::TableRecordInsertError>
             {
+                let a_guard = self.rows.a.try_lock()?;
+                let b_guard = self.rows.b.try_lock()?;
+                let c_guard = self.rows.c.try_lock()?;
+                let d_guard = self.rows.d.try_lock()?;
+
+                // TODO: Checkpoint Vec len and use for rollback
+
+                // TODO: Push the fields of each record to Vec's and write records to file
+                // TODO: Rollback all records inserted if write fails
+
+                Ok(())
             }
         }
     };
