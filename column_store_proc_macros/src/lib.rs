@@ -1,3 +1,4 @@
+use convert_case::{Case, Casing};
 use proc_macro2::{Ident, Span};
 use proc_macro::TokenStream;
 use proc_macro_error::{proc_macro_error, abort};
@@ -48,87 +49,150 @@ pub fn derive_table (item: TokenStream) -> TokenStream {
     let rows_name = format!("{}Rows", table_name);
     let rows_ident = Ident::new(&rows_name, Span::call_site());
 
+    let txn_manager_name = format!("{}TransactionManager", table_name);
+    let txn_manager_ident = Ident::new(&txn_manager_name, Span::call_site());
+
+    let mod_name = table_name.to_case(Case::Snake);
+    let mod_ident = Ident::new(&mod_name, Span::call_site());
+
     let output = quote! {
-        #[derive(Debug)]
-        struct #rows_ident {
-            // TODO: Generate from the item TokenStream
-            a: ::std::sync::Arc<::std::sync::Mutex<Vec<u64>>>,
-            b: ::std::sync::Arc<::std::sync::Mutex<Vec<u64>>>,
-            c: ::std::sync::Arc<::std::sync::Mutex<Vec<u8>>>,
-            d: ::std::sync::Arc<::std::sync::Mutex<Vec<String>>>,
-        }
-        #[derive(Debug)]
-        struct #table_ident<'a> {
-            records_file_lock_guard: ::column_store::fd_lock::RwLockWriteGuard<'a, ::std::fs::File>,
-            // TODO: Indexes from UNIQUE constraints
-            rows: #rows_ident,
-        }
-        impl<'a> #table_ident<'a> {
-            pub fn try_open_records_file (db_dir: impl AsRef<::std::path::Path>) -> std::io::Result<::column_store::fd_lock::RwLock<::std::fs::File>> {
-                let table_dir = db_dir.as_ref().join(#table_name).clone();
-                ::std::fs::create_dir_all(&table_dir)?;
-                let f = ::std::fs::OpenOptions::new()
-                    .create(true)
-                    .append(true)
-                    .open(table_dir.join("rows.cst"))?;
-                Ok(::column_store::fd_lock::RwLock::new(f))
+        mod #mod_ident {
+            use super::#record_struct_ident;
+            #[derive(Debug)]
+            struct #rows_ident {
+                // TODO: Generate from the item TokenStream
+                a: ::std::sync::Arc<::std::sync::Mutex<Vec<u64>>>,
+                b: ::std::sync::Arc<::std::sync::Mutex<Vec<u64>>>,
+                c: ::std::sync::Arc<::std::sync::Mutex<Vec<u8>>>,
+                d: ::std::sync::Arc<::std::sync::Mutex<Vec<String>>>,
             }
-            pub fn try_new (records_file_lock: &'a mut ::column_store::fd_lock::RwLock<::std::fs::File>) -> Result<Self, ::column_store::TableError>
-            {
-                let records_file_lock_guard = records_file_lock.try_write()?;
-
-                let rows = {
-                    // TODO: Read records from file
-                    let a = vec![];
-                    let b = vec![];
-                    let c = vec![];
-                    let d = vec![];
-
-                    #rows_ident{
-                        a: ::std::sync::Arc::new(::std::sync::Mutex::new(a)),
-                        b: ::std::sync::Arc::new(::std::sync::Mutex::new(b)),
-                        c: ::std::sync::Arc::new(::std::sync::Mutex::new(c)),
-                        d: ::std::sync::Arc::new(::std::sync::Mutex::new(d)),
-                    }
-                };
-
-                Ok(Self {
-                    records_file_lock_guard,
-                    rows,
-                })
+            #[derive(Debug)]
+            pub(crate) struct #table_ident<'a> {
+                records_file_lock_guard: ::column_store::fd_lock::RwLockWriteGuard<'a, ::std::fs::File>,
+                // TODO: Indexes from UNIQUE constraints
+                rows: #rows_ident,
             }
-            pub fn try_insert_one (&mut self, record: #record_struct_ident) -> Result<(), ::column_store::TableRecordInsertError>
-            {
-                let mut a_guard = self.rows.a.try_lock()?;
-                let mut b_guard = self.rows.b.try_lock()?;
-                let mut c_guard = self.rows.c.try_lock()?;
-                let mut d_guard = self.rows.d.try_lock()?;
+            impl<'a> #table_ident<'a> {
+                // TODO: Dedicated struct [...]RecordsFileLock
+                pub fn try_open_records_file (db_dir: impl AsRef<::std::path::Path>) -> std::io::Result<::column_store::fd_lock::RwLock<::std::fs::File>> {
+                    let table_dir = db_dir.as_ref().join(#table_name).clone();
+                    ::std::fs::create_dir_all(&table_dir)?;
+                    let f = ::std::fs::OpenOptions::new()
+                        .create(true)
+                        .append(true)
+                        .open(table_dir.join("rows.cst"))?;
+                    Ok(::column_store::fd_lock::RwLock::new(f))
+                }
+                fn try_new (records_file_lock: &'a mut ::column_store::fd_lock::RwLock<::std::fs::File>) -> Result<Self, ::column_store::TableInitializationError>
+                {
+                    let records_file_lock_guard = records_file_lock.try_write()?;
 
-                // TODO: Checkpoint Vec len and use for rollback
+                    let rows = {
+                        // TODO: Read records from file
+                        let a = vec![];
+                        let b = vec![];
+                        let c = vec![];
+                        let d = vec![];
 
-                a_guard.push(record.a);
-                b_guard.push(record.b);
-                c_guard.push(record.c);
-                d_guard.push(record.d);
+                        #rows_ident{
+                            a: ::std::sync::Arc::new(::std::sync::Mutex::new(a)),
+                            b: ::std::sync::Arc::new(::std::sync::Mutex::new(b)),
+                            c: ::std::sync::Arc::new(::std::sync::Mutex::new(c)),
+                            d: ::std::sync::Arc::new(::std::sync::Mutex::new(d)),
+                        }
+                    };
 
-                // TODO: Write to file
-                // TODO: Rollback if write fails
+                    Ok(Self {
+                        records_file_lock_guard,
+                        rows,
+                    })
+                }
+                fn try_insert_one (&mut self, record: #record_struct_ident) -> Result<(), ::column_store::TableRecordInsertError>
+                {
+                    let mut a_guard = self.rows.a.try_lock()?;
+                    let mut b_guard = self.rows.b.try_lock()?;
+                    let mut c_guard = self.rows.c.try_lock()?;
+                    let mut d_guard = self.rows.d.try_lock()?;
 
-                Ok(())
+                    // TODO: Checkpoint Vec len and use for rollback
+
+                    a_guard.push(record.a);
+                    b_guard.push(record.b);
+                    c_guard.push(record.c);
+                    d_guard.push(record.d);
+
+                    // TODO: Write to file
+                    // TODO: Rollback if write fails
+
+                    Ok(())
+                }
+                fn try_insert_many (&mut self, records: &[#record_struct_ident]) -> Result<(), ::column_store::TableRecordInsertError>
+                {
+                    let a_guard = self.rows.a.try_lock()?;
+                    let b_guard = self.rows.b.try_lock()?;
+                    let c_guard = self.rows.c.try_lock()?;
+                    let d_guard = self.rows.d.try_lock()?;
+
+                    // TODO: Checkpoint Vec len and use for rollback
+
+                    // TODO: Push the fields of each record to Vec's and write records to file
+                    // TODO: Rollback all records inserted if write fails
+
+                    Ok(())
+                }
             }
-            pub fn try_insert_many (&mut self, records: &[#record_struct_ident]) -> Result<(), ::column_store::TableRecordInsertError>
-            {
-                let a_guard = self.rows.a.try_lock()?;
-                let b_guard = self.rows.b.try_lock()?;
-                let c_guard = self.rows.c.try_lock()?;
-                let d_guard = self.rows.d.try_lock()?;
+            #[derive(Debug)]
+            /// The purpose of the transaction manager is to write transaction log entries for inserts, updates and deletes.
+            /// The transaction log is intended to allow for fine-grained auditing, recovery, debugging, performance tuning, etc.
+            pub(crate) struct #txn_manager_ident<'a> {
+                txn_log_file_lock_guard: ::column_store::fd_lock::RwLockWriteGuard<'a, ::std::fs::File>,
+                table: #table_ident<'a>,
+            }
+            impl<'a> #txn_manager_ident<'a> {
+                // TODO: Dedicated struct [...]TransactionLogFileLock
+                pub fn try_open_txn_log_file (db_dir: impl AsRef<::std::path::Path>) -> std::io::Result<::column_store::fd_lock::RwLock<::std::fs::File>> {
+                    let table_dir = db_dir.as_ref().join(#table_name).clone();
+                    ::std::fs::create_dir_all(&table_dir)?;
+                    let f = ::std::fs::OpenOptions::new()
+                        .create(true)
+                        .append(true)
+                        .open(table_dir.join("txn_log"))?;
+                    Ok(::column_store::fd_lock::RwLock::new(f))
+                }
+                pub fn try_new (
+                    txn_log_file_lock: &'a mut ::column_store::fd_lock::RwLock<::std::fs::File>,
+                    records_file_lock: &'a mut ::column_store::fd_lock::RwLock<::std::fs::File>
+                )
+                    -> Result<Self, ::column_store::TransactionManagerInitializationError>
+                {
+                    let txn_log_file_lock_guard = txn_log_file_lock.try_write()?;
+                    let table = #table_ident::try_new(records_file_lock)?;
 
-                // TODO: Checkpoint Vec len and use for rollback
+                    Ok(Self {
+                        txn_log_file_lock_guard,
+                        table,
+                    })
+                }
+                pub fn try_insert_one (&mut self, record: #record_struct_ident) -> Result<(), ::column_store::TableRecordInsertError>
+                {
+                    // TODO: Transaction ID
 
-                // TODO: Push the fields of each record to Vec's and write records to file
-                // TODO: Rollback all records inserted if write fails
+                    let txn_result = self.table.try_insert_one(record);
 
-                Ok(())
+                    // TODO: Transaction log entry
+
+                    Ok(())
+                }
+                pub fn try_insert_many (&mut self, records: &[#record_struct_ident]) -> Result<(), ::column_store::TableRecordInsertError>
+                {
+                    // TODO: Transaction ID
+
+                    let txn_result = self.table.try_insert_many(records);
+
+                    // TODO: Transaction log entry
+
+                    Ok(())
+                }
             }
         }
     };

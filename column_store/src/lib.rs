@@ -5,8 +5,15 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 #[error("{0}")]
-pub enum TableError {
+pub enum TableInitializationError {
     IOError(#[from] std::io::Error),
+}
+
+#[derive(Error, Debug)]
+#[error("{0}")]
+pub enum TransactionManagerInitializationError {
+    IOError(#[from] std::io::Error),
+    TableInitializationError(#[from] TableInitializationError),
 }
 
 #[derive(Error, Debug)]
