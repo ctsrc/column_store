@@ -55,3 +55,5 @@ fn test_lock_exclusive_twice () {
 
     example_table_txn_mgr.try_insert_one(Example1TableRecord::new(13, 37, 42, "Hello World!".into())).unwrap();
 }
+
+// TODO: Write tests for rollback situations
