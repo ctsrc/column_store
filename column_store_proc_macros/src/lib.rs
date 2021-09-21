@@ -46,6 +46,7 @@ pub fn derive_table (item: TokenStream) -> TokenStream {
     let table_name = &record_struct_name[..record_struct_name.len() - "Record".len()];
     let table_ident = Ident::new(table_name, Span::call_site());
 
+    let pk_ident = Ident::new(&format!("{}PrimaryKey", table_name), Span::call_site());
     let rows_ident = Ident::new(&format!("{}Rows", table_name), Span::call_site());
     let records_file_lock_ident = Ident::new(&format!("{}RecordsFileLock", table_name), Span::call_site());
     let txn_log_file_lock_ident = Ident::new(&format!("{}TransactionLogFileLock", table_name), Span::call_site());
@@ -55,14 +56,37 @@ pub fn derive_table (item: TokenStream) -> TokenStream {
     let output = quote! {
         mod #mod_ident {
             use super::#record_struct_ident;
+
+            // TODO: Eventually we might want to let crate users define their own primary keys,
+            //       including allowing the crate users defined value type, and having primary keys
+            //       span multiple columns. For now primary keys are internally generated ULIDs.
+            #[derive(Copy, Clone, Debug)]
+            struct #pk_ident {
+                value: ::column_store::Ulid,
+            }
+            impl #pk_ident {
+                fn new () -> Self {
+                    Self {
+                        value: ::column_store::Ulid::new(),
+                    }
+                }
+            }
+
             #[derive(Debug)]
             struct #rows_ident {
                 // TODO: Generate from the item TokenStream
+                // TODO: Disallow names "pk" and "pks", in order to avoid users confusing
+                //       our defined pks and their own defined fields. Since the real pk column
+                //       of the table is internally managed, and externally meaningful, we
+                //       don't want to allow anyone to refer to any of their own columns as
+                //       "pk" or "pks". Maybe even go so far as to disallow those
+                //       as prefix and/or suffix of any of their columns too.
                 a: ::std::sync::Arc<::std::sync::Mutex<Vec<u64>>>,
                 b: ::std::sync::Arc<::std::sync::Mutex<Vec<u64>>>,
                 c: ::std::sync::Arc<::std::sync::Mutex<Vec<u8>>>,
                 d: ::std::sync::Arc<::std::sync::Mutex<Vec<String>>>,
             }
+
             pub(crate) struct #records_file_lock_ident {
                 rw_lock: ::column_store::fd_lock::RwLock<::std::fs::File>,
             }
@@ -79,71 +103,97 @@ pub fn derive_table (item: TokenStream) -> TokenStream {
                     })
                 }
             }
+
             #[derive(Debug)]
             struct #table_ident<'a> {
                 records_file_lock_guard: ::column_store::fd_lock::RwLockWriteGuard<'a, ::std::fs::File>,
                 // TODO: Indexes from UNIQUE constraints
                 rows: #rows_ident,
+                pks: ::std::sync::Arc<::std::sync::Mutex<Vec<#pk_ident>>>,
             }
             impl<'a> #table_ident<'a> {
                 fn try_new (records_file_lock: &'a mut #records_file_lock_ident) -> Result<Self, ::column_store::TableInitializationError>
                 {
                     let records_file_lock_guard = records_file_lock.rw_lock.try_write()?;
 
-                    let rows = {
-                        // TODO: Read records from file
-                        let a = vec![];
-                        let b = vec![];
-                        let c = vec![];
-                        let d = vec![];
+                    let pks = vec![];
 
-                        #rows_ident{
-                            a: ::std::sync::Arc::new(::std::sync::Mutex::new(a)),
-                            b: ::std::sync::Arc::new(::std::sync::Mutex::new(b)),
-                            c: ::std::sync::Arc::new(::std::sync::Mutex::new(c)),
-                            d: ::std::sync::Arc::new(::std::sync::Mutex::new(d)),
+                    let rows = {
+                        // TODO: Read (pk, tombstone, record) tuples from file
+                        let a_values = vec![];
+                        let b_values = vec![];
+                        let c_values = vec![];
+                        let d_values = vec![];
+
+                        #rows_ident {
+                            a: ::std::sync::Arc::new(::std::sync::Mutex::new(a_values)),
+                            b: ::std::sync::Arc::new(::std::sync::Mutex::new(b_values)),
+                            c: ::std::sync::Arc::new(::std::sync::Mutex::new(c_values)),
+                            d: ::std::sync::Arc::new(::std::sync::Mutex::new(d_values)),
                         }
                     };
+
+                    let pks = ::std::sync::Arc::new(::std::sync::Mutex::new(pks));
 
                     Ok(Self {
                         records_file_lock_guard,
                         rows,
+                        pks,
                     })
                 }
-                fn try_insert_one (&mut self, record: #record_struct_ident) -> Result<(), ::column_store::TableRecordInsertError>
+                fn try_insert_one (&mut self, record: #record_struct_ident) -> Result<#pk_ident, ::column_store::TableRecordInsertError>
                 {
-                    let mut a_guard = self.rows.a.try_lock()?;
-                    let mut b_guard = self.rows.b.try_lock()?;
-                    let mut c_guard = self.rows.c.try_lock()?;
-                    let mut d_guard = self.rows.d.try_lock()?;
+                    let mut pks_guard = self.pks.try_lock()?;
+                    let mut a_values_guard = self.rows.a.try_lock()?;
+                    let mut b_values_guard = self.rows.b.try_lock()?;
+                    let mut c_values_guard = self.rows.c.try_lock()?;
+                    let mut d_values_guard = self.rows.d.try_lock()?;
+
+                    // TODO: Enforce UNIQUE constraints.
+                    //       I.e. scan indexed columns for existence of values we are trying to insert.
+                    //       I.e. perform lookup in BTreeMap or HashMap that we are using.
 
                     // TODO: Checkpoint Vec len and use for rollback
 
-                    a_guard.push(record.a);
-                    b_guard.push(record.b);
-                    c_guard.push(record.c);
-                    d_guard.push(record.d);
+                    let pk = #pk_ident::new();
 
-                    // TODO: Write to file
+                    pks_guard.push(pk);
+                    a_values_guard.push(record.a);
+                    b_values_guard.push(record.b);
+                    c_values_guard.push(record.c);
+                    d_values_guard.push(record.d);
+
+                    // TODO: Write (pk, tombstone, record) tuple to file
                     // TODO: Rollback if write fails
 
-                    Ok(())
+                    // TODO: Return PK of inserted record.
+                    Ok(pk)
                 }
-                fn try_insert_many (&mut self, records: &[#record_struct_ident]) -> Result<(), ::column_store::TableRecordInsertError>
+                fn try_insert_many (&mut self, records: &[#record_struct_ident]) -> Result<Vec<#pk_ident>, ::column_store::TableRecordInsertError>
                 {
-                    let a_guard = self.rows.a.try_lock()?;
-                    let b_guard = self.rows.b.try_lock()?;
-                    let c_guard = self.rows.c.try_lock()?;
-                    let d_guard = self.rows.d.try_lock()?;
+                    let mut pks_guard = self.pks.try_lock()?;
+                    let a_values_guard = self.rows.a.try_lock()?;
+                    let b_values_guard = self.rows.b.try_lock()?;
+                    let c_values_guard = self.rows.c.try_lock()?;
+                    let d_values_guard = self.rows.d.try_lock()?;
+
+                    // TODO: Enforce UNIQUE constraints.
+                    //       I.e. scan indexed columns for existence of values we are trying to insert.
+                    //       I.e. perform lookup in BTreeMap or HashMap that we are using.
 
                     // TODO: Checkpoint Vec len and use for rollback
 
-                    // TODO: Push the fields of each record to Vec's and write records to file
+                    let pks = vec![];
+                    // TODO: Generate pk values
+
+                    // TODO: Push the fields of each record to Vec's and
+                    //       write (pk, tombstone, record) tuples to file
                     // TODO: Rollback all records inserted if write fails
 
-                    Ok(())
+                    Ok(pks)
                 }
             }
+
             pub(crate) struct #txn_log_file_lock_ident {
                 rw_lock: ::column_store::fd_lock::RwLock<::std::fs::File>,
             }
@@ -160,9 +210,10 @@ pub fn derive_table (item: TokenStream) -> TokenStream {
                     })
                 }
             }
-            #[derive(Debug)]
+
             /// The purpose of the transaction manager is to write transaction log entries for inserts, updates and deletes.
             /// The transaction log is intended to allow for fine-grained auditing, recovery, debugging, performance tuning, etc.
+            #[derive(Debug)]
             pub(crate) struct #txn_manager_ident<'a> {
                 txn_log_file_lock_guard: ::column_store::fd_lock::RwLockWriteGuard<'a, ::std::fs::File>,
                 table: #table_ident<'a>,
@@ -188,8 +239,9 @@ pub fn derive_table (item: TokenStream) -> TokenStream {
 
                     let txn_result = self.table.try_insert_one(record);
 
-                    // TODO: Transaction log entry
+                    // TODO: Transaction log entry. When txn_result is Ok(...), include pk in log entry.
 
+                    // TODO MAYBE: Further return pk
                     Ok(())
                 }
                 pub fn try_insert_many (&mut self, records: &[#record_struct_ident]) -> Result<(), ::column_store::TableRecordInsertError>
@@ -198,8 +250,9 @@ pub fn derive_table (item: TokenStream) -> TokenStream {
 
                     let txn_result = self.table.try_insert_many(records);
 
-                    // TODO: Transaction log entry
+                    // TODO: Transaction log entry. When txn_result is Ok(...), include pks in log entry.
 
+                    // TODO MAYBE: Further return pks
                     Ok(())
                 }
             }

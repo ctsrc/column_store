@@ -1,5 +1,6 @@
 pub use column_store_proc_macros::Table;
 pub use fd_lock;
+pub use ulid::Ulid;
 
 use thiserror::Error;
 
