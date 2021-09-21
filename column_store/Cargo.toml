@@ -2,7 +2,7 @@
 name = "column_store"
 description = "Column-oriented database management system."
 license = "ISC"
-readme = "README.md"
+readme = "../README.md"
 repository = "https://github.com/ctsrc/column_store/tree/master/column_store"
 version = "0.1.0"
 authors = ["Erik Nordstrøm <erik@nordstroem.no>"]
