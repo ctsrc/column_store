@@ -46,14 +46,10 @@ pub fn derive_table (item: TokenStream) -> TokenStream {
     let table_name = &record_struct_name[..record_struct_name.len() - "Record".len()];
     let table_ident = Ident::new(table_name, Span::call_site());
 
-    let rows_name = format!("{}Rows", table_name);
-    let rows_ident = Ident::new(&rows_name, Span::call_site());
-
-    let txn_manager_name = format!("{}TransactionManager", table_name);
-    let txn_manager_ident = Ident::new(&txn_manager_name, Span::call_site());
-
-    let mod_name = table_name.to_case(Case::Snake);
-    let mod_ident = Ident::new(&mod_name, Span::call_site());
+    let rows_ident = Ident::new(&format!("{}Rows", table_name), Span::call_site());
+    let txn_log_file_lock_ident = Ident::new(&format!("{}TransactionLogFileLock", table_name), Span::call_site());
+    let txn_manager_ident = Ident::new(&format!("{}TransactionManager", table_name), Span::call_site());
+    let mod_ident = Ident::new(&table_name.to_case(Case::Snake), Span::call_site());
 
     let output = quote! {
         mod #mod_ident {
