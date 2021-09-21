@@ -14,11 +14,9 @@ struct Example1TableRecord {
 
 #[test]
 fn test_get_first_match_1 () {
-    use crate::example_1_table::{Example1Table, Example1TableTransactionManager};
-
     let db_dir = tempdir().unwrap();
-    let mut records_l = Example1Table::try_open_records_file(db_dir.path()).unwrap();
-    let mut txn_log_l = Example1TableTransactionManager::try_open_txn_log_file(db_dir.path()).unwrap();
+    let mut records_l = Example1TableRecordsFileLock::try_new(db_dir.path()).unwrap();
+    let mut txn_log_l = Example1TableTransactionLogFileLock::try_new(db_dir.path()).unwrap();
     let mut example_table_txn_mgr = Example1TableTransactionManager::try_new(&mut txn_log_l, &mut records_l).unwrap();
     example_table_txn_mgr.try_insert_one(Example1TableRecord::new(13, 37, 42, "Hello World!".into())).unwrap();
     example_table_txn_mgr.try_insert_one(Example1TableRecord::new(23, 23, 90, "Hot pepper sauce!".into())).unwrap();
@@ -30,11 +28,9 @@ fn test_get_first_match_1 () {
 
 #[test]
 fn test_get_first_match_2 () {
-    use crate::example_1_table::{Example1Table, Example1TableTransactionManager};
-
     let db_dir = tempdir().unwrap();
-    let mut records_l = Example1Table::try_open_records_file(db_dir.path()).unwrap();
-    let mut txn_log_l = Example1TableTransactionManager::try_open_txn_log_file(db_dir.path()).unwrap();
+    let mut records_l = Example1TableRecordsFileLock::try_new(db_dir.path()).unwrap();
+    let mut txn_log_l = Example1TableTransactionLogFileLock::try_new(db_dir.path()).unwrap();
     let mut example_table_txn_mgr = Example1TableTransactionManager::try_new(&mut txn_log_l, &mut records_l).unwrap();
     example_table_txn_mgr.try_insert_one(Example1TableRecord::new(13, 37, 42, "Hello World!".into())).unwrap();
     example_table_txn_mgr.try_insert_one(Example1TableRecord::new(23, 23, 90, "Hot pepper sauce!".into())).unwrap();
@@ -46,16 +42,14 @@ fn test_get_first_match_2 () {
 
 #[test]
 fn test_lock_exclusive_twice () {
-    use crate::example_1_table::{Example1Table, Example1TableTransactionManager};
-
     let db_dir = tempdir().unwrap();
 
-    let mut records_l = Example1Table::try_open_records_file(db_dir.path()).unwrap();
-    let mut txn_log_l = Example1TableTransactionManager::try_open_txn_log_file(db_dir.path()).unwrap();
+    let mut records_l = Example1TableRecordsFileLock::try_new(db_dir.path()).unwrap();
+    let mut txn_log_l = Example1TableTransactionLogFileLock::try_new(db_dir.path()).unwrap();
     let mut example_table_txn_mgr = Example1TableTransactionManager::try_new(&mut txn_log_l, &mut records_l).unwrap();
 
-    let mut records_l = Example1Table::try_open_records_file(db_dir.path()).unwrap();
-    let mut txn_log_l = Example1TableTransactionManager::try_open_txn_log_file(db_dir.path()).unwrap();
+    let mut records_l = Example1TableRecordsFileLock::try_new(db_dir.path()).unwrap();
+    let mut txn_log_l = Example1TableTransactionLogFileLock::try_new(db_dir.path()).unwrap();
     Example1TableTransactionManager::try_new(&mut txn_log_l, &mut records_l)
         .expect_err("Was able to open already-locked table file");
 

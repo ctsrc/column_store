@@ -47,6 +47,7 @@ pub fn derive_table (item: TokenStream) -> TokenStream {
     let table_ident = Ident::new(table_name, Span::call_site());
 
     let rows_ident = Ident::new(&format!("{}Rows", table_name), Span::call_site());
+    let records_file_lock_ident = Ident::new(&format!("{}RecordsFileLock", table_name), Span::call_site());
     let txn_log_file_lock_ident = Ident::new(&format!("{}TransactionLogFileLock", table_name), Span::call_site());
     let txn_manager_ident = Ident::new(&format!("{}TransactionManager", table_name), Span::call_site());
     let mod_ident = Ident::new(&table_name.to_case(Case::Snake), Span::call_site());
@@ -62,26 +63,32 @@ pub fn derive_table (item: TokenStream) -> TokenStream {
                 c: ::std::sync::Arc<::std::sync::Mutex<Vec<u8>>>,
                 d: ::std::sync::Arc<::std::sync::Mutex<Vec<String>>>,
             }
-            #[derive(Debug)]
-            pub(crate) struct #table_ident<'a> {
-                records_file_lock_guard: ::column_store::fd_lock::RwLockWriteGuard<'a, ::std::fs::File>,
-                // TODO: Indexes from UNIQUE constraints
-                rows: #rows_ident,
+            pub(crate) struct #records_file_lock_ident {
+                rw_lock: ::column_store::fd_lock::RwLock<::std::fs::File>,
             }
-            impl<'a> #table_ident<'a> {
-                // TODO: Dedicated struct [...]RecordsFileLock
-                pub fn try_open_records_file (db_dir: impl AsRef<::std::path::Path>) -> std::io::Result<::column_store::fd_lock::RwLock<::std::fs::File>> {
+            impl #records_file_lock_ident {
+                pub fn try_new (db_dir: impl AsRef<::std::path::Path>) -> std::io::Result<Self> {
                     let table_dir = db_dir.as_ref().join(#table_name).clone();
                     ::std::fs::create_dir_all(&table_dir)?;
                     let f = ::std::fs::OpenOptions::new()
                         .create(true)
                         .append(true)
-                        .open(table_dir.join("rows.cst"))?;
-                    Ok(::column_store::fd_lock::RwLock::new(f))
+                        .open(table_dir.join("records.csr"))?;
+                    Ok(Self {
+                        rw_lock: ::column_store::fd_lock::RwLock::new(f)
+                    })
                 }
-                fn try_new (records_file_lock: &'a mut ::column_store::fd_lock::RwLock<::std::fs::File>) -> Result<Self, ::column_store::TableInitializationError>
+            }
+            #[derive(Debug)]
+            struct #table_ident<'a> {
+                records_file_lock_guard: ::column_store::fd_lock::RwLockWriteGuard<'a, ::std::fs::File>,
+                // TODO: Indexes from UNIQUE constraints
+                rows: #rows_ident,
+            }
+            impl<'a> #table_ident<'a> {
+                fn try_new (records_file_lock: &'a mut #records_file_lock_ident) -> Result<Self, ::column_store::TableInitializationError>
                 {
-                    let records_file_lock_guard = records_file_lock.try_write()?;
+                    let records_file_lock_guard = records_file_lock.rw_lock.try_write()?;
 
                     let rows = {
                         // TODO: Read records from file
@@ -137,6 +144,22 @@ pub fn derive_table (item: TokenStream) -> TokenStream {
                     Ok(())
                 }
             }
+            pub(crate) struct #txn_log_file_lock_ident {
+                rw_lock: ::column_store::fd_lock::RwLock<::std::fs::File>,
+            }
+            impl #txn_log_file_lock_ident {
+                pub fn try_new (db_dir: impl AsRef<::std::path::Path>) -> std::io::Result<Self> {
+                    let table_dir = db_dir.as_ref().join(#table_name).clone();
+                    ::std::fs::create_dir_all(&table_dir)?;
+                    let f = ::std::fs::OpenOptions::new()
+                        .create(true)
+                        .append(true)
+                        .open(table_dir.join("transaction_log.cstl"))?;
+                    Ok(Self {
+                        rw_lock: ::column_store::fd_lock::RwLock::new(f)
+                    })
+                }
+            }
             #[derive(Debug)]
             /// The purpose of the transaction manager is to write transaction log entries for inserts, updates and deletes.
             /// The transaction log is intended to allow for fine-grained auditing, recovery, debugging, performance tuning, etc.
@@ -145,23 +168,13 @@ pub fn derive_table (item: TokenStream) -> TokenStream {
                 table: #table_ident<'a>,
             }
             impl<'a> #txn_manager_ident<'a> {
-                // TODO: Dedicated struct [...]TransactionLogFileLock
-                pub fn try_open_txn_log_file (db_dir: impl AsRef<::std::path::Path>) -> std::io::Result<::column_store::fd_lock::RwLock<::std::fs::File>> {
-                    let table_dir = db_dir.as_ref().join(#table_name).clone();
-                    ::std::fs::create_dir_all(&table_dir)?;
-                    let f = ::std::fs::OpenOptions::new()
-                        .create(true)
-                        .append(true)
-                        .open(table_dir.join("txn_log"))?;
-                    Ok(::column_store::fd_lock::RwLock::new(f))
-                }
                 pub fn try_new (
-                    txn_log_file_lock: &'a mut ::column_store::fd_lock::RwLock<::std::fs::File>,
-                    records_file_lock: &'a mut ::column_store::fd_lock::RwLock<::std::fs::File>
+                    txn_log_file_lock: &'a mut #txn_log_file_lock_ident,
+                    records_file_lock: &'a mut #records_file_lock_ident
                 )
                     -> Result<Self, ::column_store::TransactionManagerInitializationError>
                 {
-                    let txn_log_file_lock_guard = txn_log_file_lock.try_write()?;
+                    let txn_log_file_lock_guard = txn_log_file_lock.rw_lock.try_write()?;
                     let table = #table_ident::try_new(records_file_lock)?;
 
                     Ok(Self {
@@ -191,6 +204,7 @@ pub fn derive_table (item: TokenStream) -> TokenStream {
                 }
             }
         }
+        use #mod_ident::{#records_file_lock_ident, #txn_log_file_lock_ident, #txn_manager_ident};
     };
 
     TokenStream::from(output)
